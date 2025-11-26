@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jogo da Comida Saudável 🍎</title>
+
+<style>
+  body {
+    font-family: "Comic Sans MS", sans-serif;
+    background: #dff9fb;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  h1 { color: #22a6b3; margin: 8px 0; font-size: clamp(20px, 4vw, 32px); }
+
+  #painel {
+    display: none;
+    width: 100%;
+    max-width: 900px;
+    padding: 6px 10px;
+    font-size: clamp(12px, 3vw, 18px);
+    color: #0984e3;
+    font-weight: bold;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  #btn-proxima-fase {
+    background: #6c5ce7;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: clamp(12px, 3vw, 16px);
+    display: none;
+  }
+
+  #game-area {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-width: 900px;
+    max-height: 600px;
+    margin-top: 5px;
+    background: #c7ecee;
+    border: 4px solid #7ed6df;
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 1;
+    touch-action: none;
+  }
+
+  #boneco {
+    position: absolute;
+    width: min(22vw, 110px);
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    user-select: none;
+    transition: 0.2s;
+  }
+
+  #hitbox {
+    position: absolute;
+    width: 60%;
+    height: 40%;
+    bottom: 0;
+    left: 20%;
+  }
+
+  .comida {
+    width: min(22vw, 80px);
+    position: absolute;
+    user-select: none;
+    cursor: grab;
+    touch-action: none;
+    transition: transform .1s, opacity .2s;
+  }
+
+  .comida:active { cursor: grabbing; transform: scale(1.07); }
+
+  #mensagem {
+    font-size: clamp(14px, 3vw, 20px);
+    font-weight: bold;
+    margin-top: 4px;
+    color: #130f40;
+  }
+
+  /* Telas */
+  #tela-inicio, #tela-fase, #tela-fim {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(223,249,251,0.97);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    text-align: center;
+    z-index: 999999;
+  }
+
+  #tela-fase, #tela-fim { display: none; }
+
+  button {
+    background: #22a6b3;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    font-size: clamp(14px, 3vw, 20px);
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 12px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:hover { background: #0984e3; }
+
+</style>
+</head>
+
+<body>
+<h1>🍎 Alimente o Bonequinho! 🧍</h1>
+
+<div id="painel">
+  <div>Fase: <strong id="fase">1</strong></div>
+  <div>Pontuação: <strong id="pontos">0</strong></div>
+  <div>Tempo: <strong id="tempo">30</strong>s</div>
+  <div>Saudáveis: <span id="cont-s">0</span> | Não saudáveis: <span id="cont-n">0</span></div>
+  <button id="btn-proxima-fase">Próxima Fase ▶️</button>
+</div>
+
+<div id="game-area">
+
+  <img id="boneco" src="imagens/boneco-feliz.png">
+  <div id="hitbox"></div>
+  <div id="comidas-container"></div>
+
+  <!-- Tela inicial -->
+  <div id="tela-inicio">
+    <h2 style="font-size: clamp(18px, 4vw, 28px);">🍏 Bem-vindo ao Jogo!</h2>
+    <p>Arraste as comidas até o boneco. Complete 2 saudáveis ou 2 não saudáveis.</p>
+    <button id="btn-start">Começar ▶️</button>
+  </div>
+
+  <!-- Tela fase -->
+  <div id="tela-fase">
+    <h2 id="texto-fase"></h2>
+    <button id="btn-iniciar-fase">Iniciar Fase ▶️</button>
+  </div>
+
+  <!-- Tela final -->
+  <div id="tela-fim">
+    <h2 id="mensagem-final"></h2>
+    <p style="font-size:20px;">Pontuação final: <strong id="pontuacao-final" style="font-size:28px;color:#e17055;"></strong></p>
+    <button id="btn-reiniciar">Jogar novamente 🔁</button>
+  </div>
+
+</div>
+
+<div id="mensagem"></div>
+
+<!-- Sons -->
+<audio id="som-bom" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_9cb932b3d8.mp3?filename=game-correct-104936.mp3"></audio>
+<audio id="som-ruim" src="https://cdn.pixabay.com/download/audio/2021/09/06/audio_28a0a9d0ac.mp3?filename=error-126627.mp3"></audio>
+<audio id="som-fim" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_3cceca18a3.mp3?filename=game-over-arcade-6435.mp3"></audio>
+
+<script>
+/* CONFIGURAÇÕES DO JOGO */
+const fases = [
+  { nome: "🥭 Fase 1: Frutas", tempo: 30, comidas: [
+      { tipo:"s", src:"imagens/maca.png" },
+      { tipo:"s", src:"imagens/banana.png" },
+      { tipo:"n", src:"imagens/refrigerante.png" },
+      { tipo:"n", src:"imagens/bala.png" }
+    ]},
+  { nome: "🥕 Fase 2: Verduras", tempo: 25, comidas: [
+      { tipo:"s", src:"imagens/cenoura.png" },
+      { tipo:"s", src:"imagens/brocolis.png" },
+      { tipo:"n", src:"imagens/batatafrita.png" },
+      { tipo:"n", src:"imagens/pizza.png" }
+    ]},
+  { nome: "🍔 Fase 3: Mistas", tempo: 20, comidas: [
+      { tipo:"s", src:"imagens/tomate.png" },
+      { tipo:"s", src:"imagens/pera.png" },
+      { tipo:"n", src:"imagens/hamburguer.png" },
+      { tipo:"n", src:"imagens/sorvete.png" }
+    ]}
+];
+
+let faseAtual = 1;
+let pontos = 0;
+let tempo = 30;
+let jogoAtivo = false;
+let saudaveis = 0;
+let naoSaudaveis = 0;
+let timerId = null;
+
+/* DOM */
+const painel = document.getElementById('painel');
+const faseEl = document.getElementById('fase');
+const pontosEl = document.getElementById('pontos');
+const tempoEl = document.getElementById('tempo');
+const contS = document.getElementById('cont-s');
+const contN = document.getElementById('cont-n');
+const mensagem = document.getElementById('mensagem');
+
+const boneco = document.getElementById('boneco');
+const hitbox = document.getElementById('hitbox');
+const comidasContainer = document.getElementById('comidas-container');
+
+const telaInicio = document.getElementById('tela-inicio');
+const telaFase = document.getElementById('tela-fase');
+const telaFim = document.getElementById('tela-fim');
+const textoFase = document.getElementById('texto-fase');
+const mensagemFinal = document.getElementById('mensagem-final');
+const pontuacaoFinal = document.getElementById('pontuacao-final');
+
+const btnStart = document.getElementById('btn-start');
+const btnIniciarFase = document.getElementById('btn-iniciar-fase');
+const btnProxima = document.getElementById('btn-proxima-fase');
+const btnReiniciar = document.getElementById('btn-reiniciar');
+
+const somBom = document.getElementById('som-bom');
+const somRuim = document.getElementById('som-ruim');
+const somFim = document.getElementById('som-fim');
+
+
+/* INÍCIO DO JOGO */
+btnStart.addEventListener("click", onStart);
+
+function onStart(){
+  telaInicio.style.display = "none";
+  painel.style.display = "flex";
+  prepararTelaFase();
+}
+
+function prepararTelaFase(){
+  const f = fases[faseAtual - 1];
+  textoFase.textContent = f.nome;
+  telaFase.style.display = "flex";
+}
+
+btnIniciarFase.addEventListener("click", iniciarFase);
+
+/* INICIAR FASE */
+function iniciarFase(){
+  telaFase.style.display = "none";
+  jogoAtivo = true;
+
+  const f = fases[faseAtual - 1];
+  tempo = f.tempo;
+  tempoEl.textContent = tempo;
+
+  saudaveis = 0;
+  naoSaudaveis = 0;
+  contS.textContent = 0;
+  contN.textContent = 0;
+
+  carregarComidas(f.comidas);
+  iniciarTimer();
+}
+
+/* TIMER */
+function iniciarTimer(){
+  clearInterval(timerId);
+
+  timerId = setInterval(()=>{
+    if(!jogoAtivo) return;
+
+    tempo--;
+    tempoEl.textContent = tempo;
+
+    if(tempo <= 0){
+      jogoAtivo = false;
+      clearInterval(timerId);
+      mensagem.textContent = "Tempo esgotado!";
+    }
+  },1000);
+}
+
+/* CARREGAR COMIDAS */
+function carregarComidas(lista){
+  comidasContainer.innerHTML = "";
+
+  lista.forEach((c,i)=>{
+    const img = document.createElement("img");
+    img.className = "comida";
+    img.dataset.tipo = c.tipo;
+    img.src = c.src;
+    img.style.left = (10 + i * 22) + "%";
+    img.style.top = "8%";
+
+    comidasContainer.appendChild(img);
+
+    img.addEventListener("pointerdown", iniciarArrasto);
+    img.ondragstart = e => e.preventDefault();
+  });
+}
+
+/* ARRASTAR */
+let dragging = null, offsetX = 0, offsetY = 0;
+
+function iniciarArrasto(e){
+  if(!jogoAtivo) return;
+
+  dragging = e.currentTarget;
+  dragging.setPointerCapture(e.pointerId);
+
+  const rect = dragging.getBoundingClientRect();
+  const area = document.getElementById("game-area").getBoundingClientRect();
+
+  offsetX = e.clientX - rect.left;
+  offsetY = e.clientY - rect.top;
+
+  function mover(ev){
+    let x = ev.clientX - area.left - offsetX;
+    let y = ev.clientY - area.top - offsetY;
+    dragging.style.left = x + "px";
+    dragging.style.top = y + "px";
+  }
+
+  function soltar(ev){
+    try{ dragging.releasePointerCapture(e.pointerId); }catch{}
+
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+
+    const foodRect = dragging.getBoundingClientRect();
+    const hitRect = hitbox.getBoundingClientRect();
+
+    const colidiu = !(hitRect.right < foodRect.left ||
+                      hitRect.left > foodRect.right ||
+                      hitRect.bottom < foodRect.top ||
+                      hitRect.top > foodRect.bottom);
+
+    if(colidiu) comer(dragging);
+
+    dragging = null;
+  }
+
+  document.addEventListener("pointermove", mover);
+  document.addEventListener("pointerup", soltar);
+}
+
+/* COMER */
+function comer(el){
+  const tipo = el.dataset.tipo;
+
+  if(tipo === "s"){
+    saudaveis++;
+    pontos += 10;
+    somBom.play();
+    boneco.src = "imagens/boneco-feliz.png";
+
+  } else {
+    naoSaudaveis++;
+    pontos = Math.max(0, pontos - 5);
+    somRuim.play();
+    boneco.src = "imagens/boneco-triste.png";
+    setTimeout(()=> boneco.src = "imagens/boneco-feliz.png", 800);
+  }
+
+  pontosEl.textContent = pontos;
+  contS.textContent = saudaveis;
+  contN.textContent = naoSaudaveis;
+
+  el.style.opacity = "0";
+  setTimeout(()=> el.remove(), 200);
+
+  if(saudaveis >= 2 || naoSaudaveis >= 2){
+    jogoAtivo = false;
+    clearInterval(timerId);
+    btnProxima.style.display = "inline-block";
+    mensagem.textContent = "Clique em Próxima Fase!";
+  }
+}
+
+/* PRÓXIMA FASE */
+btnProxima.addEventListener("click", ()=>{
+  faseAtual++;
+  if(faseAtual > fases.length){
+    finalizar();
+    return;
+  }
+  faseEl.textContent = faseAtual;
+  btnProxima.style.display = "none";
+  prepararTelaFase();
+});
+
+/* FINAL */
+function finalizar(){
+  telaFim.style.display = "flex";
+  pontuacaoFinal.textContent = pontos;
+
+  mensagemFinal.textContent =
+    pontos >= 80 ? "🎉 Parabéns! Você arrasou!" :
+    pontos >= 50 ? "😄 Muito bem!" :
+                   "😕 Tente melhorar!";
+
+  somFim.play();
+}
+
+/* REINICIAR */
+btnReiniciar.addEventListener("click", ()=> location.reload());
+
+</script>
+</body>
+</html>
