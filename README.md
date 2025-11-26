@@ -1,1 +1,1 @@
-jogo-alimentacao
+jogo
